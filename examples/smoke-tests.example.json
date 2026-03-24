@@ -1,0 +1,14 @@
+[
+  {
+    "Name": "HFM row count check",
+    "Database": "HFM",
+    "Query": "SELECT COUNT(*) FROM dbo.Accounts",
+    "ExpectedScalar": null
+  },
+  {
+    "Name": "App config exists",
+    "Database": "APPDB",
+    "Query": "SELECT COUNT(*) FROM dbo.Settings WHERE IsActive = 1",
+    "ExpectedScalar": null
+  }
+]

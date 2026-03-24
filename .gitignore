@@ -1,0 +1,12 @@
+# Output reports
+*Output/
+*.csv
+!examples/*.json
+
+# Credentials / secrets
+*.cred
+*.credential
+.env
+
+# PowerShell artifacts
+*.psm1.bak
