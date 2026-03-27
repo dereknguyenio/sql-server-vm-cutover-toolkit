@@ -10,6 +10,19 @@ Two scripts to validate your new SQL Server Always On AG — one before cutover,
 
 ---
 
+## Permissions Required
+
+| What | Minimum Permission |
+|---|---|
+| SQL instances (primary + secondary) | `sysadmin` fixed server role |
+| Windows / cluster checks | Local Administrator on the primary SQL VM |
+
+> If you don't have local admin, add `-SkipClusterChecks` to skip WSFC validation — all SQL and AG checks still run.
+>
+> These scripts are **read-only** — nothing is changed, restarted, or locked. Safe to run during business hours.
+
+---
+
 ## Prerequisites
 
 Run once, in PowerShell on the SQL VM:
