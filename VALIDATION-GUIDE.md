@@ -33,11 +33,12 @@ Install-Module dbatools -Scope CurrentUser -Force
 
 > dbatools connects to the secondary remotely over TCP — no installation needed on the secondary.
 
-Clone the toolkit:
+Download the toolkit (no git required):
 
 ```powershell
-git clone https://github.com/dereknguyenio/sql-server-vm-cutover-toolkit.git
-cd sql-server-vm-cutover-toolkit
+Invoke-WebRequest -Uri "https://github.com/dereknguyenio/sql-server-vm-cutover-toolkit/archive/refs/heads/master.zip" -OutFile "C:\CutoverToolkit.zip"
+Expand-Archive -Path "C:\CutoverToolkit.zip" -DestinationPath "C:\" -Force
+cd "C:\sql-server-vm-cutover-toolkit-master"
 ```
 
 ---
