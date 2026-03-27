@@ -2,6 +2,17 @@
 
 Production cutover and validation scripts for migrating SQL Server databases to a new Always On Availability Group on Azure VMs.
 
+## Quick Links
+
+- **[Validation Guide](VALIDATION-GUIDE.md)** — Pre and post cutover health checks (start here)
+- **[Full Runbook](RUNBOOK.md)** — End-to-end cutover steps including migration
+
+## Where to Run
+
+Run the scripts from either:
+- **The primary SQL VM** (recommended) — RDP in, no firewall issues, full cluster validation works
+- **A jump box / workstation** — Requires TCP 1433 open to SQL instances; add `-SkipClusterChecks` if WSFC ports aren't open
+
 ## Overview
 
 This toolkit provides four scripts that cover the end-to-end cutover workflow. Each script produces HTML, CSV, and JSON reports.
