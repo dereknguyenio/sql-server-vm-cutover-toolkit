@@ -250,14 +250,14 @@ if (-not (Get-Module -ListAvailable -Name dbatools)) {
     throw "dbatools module is required. Install with: Install-Module dbatools -Scope CurrentUser"
 }
 Import-Module dbatools -ErrorAction Stop
+Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true
 
 New-OutputFolder -Path $OutputFolder
 
 # Connectivity validation
 try {
-    $srcConn = Test-DbaConnection @(
-        Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
-    )
+    $srcParams = Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
+    $srcConn = Test-DbaConnection @srcParams
     Add-Result -Category "Connectivity" -ObjectType "SQLInstance" -ObjectName $SourceInstance -Status "PASS" `
         -Details "Connected to source instance."
 }
@@ -269,9 +269,8 @@ catch {
 }
 
 try {
-    $tgtConn = Test-DbaConnection @(
-        Get-DbaConnectionParams -Instance $TargetInstance -Credential $TargetSqlCredential
-    )
+    $tgtParams = Get-DbaConnectionParams -Instance $TargetInstance -Credential $TargetSqlCredential
+    $tgtConn = Test-DbaConnection @tgtParams
     Add-Result -Category "Connectivity" -ObjectType "SQLInstance" -ObjectName $TargetInstance -Status "PASS" `
         -Details "Connected to target instance."
 }
@@ -285,9 +284,8 @@ catch {
 # Logins
 if ($CopyLogins) {
     try {
-        $logins = Get-DbaLogin @(
-            Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
-        ) | Where-Object {
+        $srcLoginParams = Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
+        $logins = Get-DbaLogin @srcLoginParams | Where-Object {
             $_.Name -notin $ExcludeLogins -and $_.Name -notlike '##*'
         }
 
@@ -326,9 +324,8 @@ else {
 # Credentials
 if ($CopyCredentials) {
     try {
-        $creds = Get-DbaCredential @(
-            Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
-        ) | Where-Object { $_.Name -notin $ExcludeCredentials }
+        $srcCredParams = Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
+        $creds = Get-DbaCredential @srcCredParams | Where-Object { $_.Name -notin $ExcludeCredentials }
 
         foreach ($cred in $creds) {
             if ($PSCmdlet.ShouldProcess($TargetInstance, "Copy credential $($cred.Name)")) {
@@ -365,9 +362,8 @@ else {
 # Linked Servers
 if ($CopyLinkedServers) {
     try {
-        $linkedServers = Get-DbaLinkedServer @(
-            Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
-        ) | Where-Object { $_.Name -notin $ExcludeLinkedServers }
+        $srcLsParams = Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
+        $linkedServers = Get-DbaLinkedServer @srcLsParams | Where-Object { $_.Name -notin $ExcludeLinkedServers }
 
         foreach ($ls in $linkedServers) {
             if ($PSCmdlet.ShouldProcess($TargetInstance, "Copy linked server $($ls.Name)")) {
@@ -404,9 +400,8 @@ else {
 # Jobs
 if ($CopyJobs) {
     try {
-        $jobs = Get-DbaAgentJob @(
-            Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
-        ) | Where-Object { $_.Name -notin $ExcludeJobs }
+        $srcJobParams = Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
+        $jobs = Get-DbaAgentJob @srcJobParams | Where-Object { $_.Name -notin $ExcludeJobs }
 
         foreach ($job in $jobs) {
             if ($PSCmdlet.ShouldProcess($TargetInstance, "Copy SQL Agent job $($job.Name)")) {
@@ -579,28 +574,19 @@ else {
 
 # Post-copy validation
 try {
+    $srcValParams = Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
+    $tgtValParams = Get-DbaConnectionParams -Instance $TargetInstance -Credential $TargetSqlCredential
+
     $sourceCounts = [pscustomobject]@{
-        Logins        = (Get-DbaLogin @(
-                            Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
-                        ) | Where-Object { $_.Name -notin $ExcludeLogins -and $_.Name -notlike '##*' }).Count
-        Jobs          = (Get-DbaAgentJob @(
-                            Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
-                        ) | Where-Object { $_.Name -notin $ExcludeJobs }).Count
-        LinkedServers = (Get-DbaLinkedServer @(
-                            Get-DbaConnectionParams -Instance $SourceInstance -Credential $SourceSqlCredential
-                        ) | Where-Object { $_.Name -notin $ExcludeLinkedServers }).Count
+        Logins        = (Get-DbaLogin @srcValParams | Where-Object { $_.Name -notin $ExcludeLogins -and $_.Name -notlike '##*' }).Count
+        Jobs          = (Get-DbaAgentJob @srcValParams | Where-Object { $_.Name -notin $ExcludeJobs }).Count
+        LinkedServers = (Get-DbaLinkedServer @srcValParams | Where-Object { $_.Name -notin $ExcludeLinkedServers }).Count
     }
 
     $targetCounts = [pscustomobject]@{
-        Logins        = (Get-DbaLogin @(
-                            Get-DbaConnectionParams -Instance $TargetInstance -Credential $TargetSqlCredential
-                        ) | Where-Object { $_.Name -notlike '##*' }).Count
-        Jobs          = (Get-DbaAgentJob @(
-                            Get-DbaConnectionParams -Instance $TargetInstance -Credential $TargetSqlCredential
-                        )).Count
-        LinkedServers = (Get-DbaLinkedServer @(
-                            Get-DbaConnectionParams -Instance $TargetInstance -Credential $TargetSqlCredential
-                        )).Count
+        Logins        = (Get-DbaLogin @tgtValParams | Where-Object { $_.Name -notlike '##*' }).Count
+        Jobs          = (Get-DbaAgentJob @tgtValParams).Count
+        LinkedServers = (Get-DbaLinkedServer @tgtValParams).Count
     }
 
     Add-Result -Category "Validation" -ObjectType "CountParity" -ObjectName "Logins" -Status "INFO" `

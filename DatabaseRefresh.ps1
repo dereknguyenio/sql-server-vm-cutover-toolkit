@@ -238,6 +238,7 @@ if (-not (Get-Module -ListAvailable -Name dbatools)) {
     throw "dbatools module is required. Install with: Install-Module dbatools -Scope CurrentUser"
 }
 Import-Module dbatools -ErrorAction Stop
+Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true
 
 New-OutputFolder -Path $OutputFolder
 New-OutputFolder -Path $BackupPath

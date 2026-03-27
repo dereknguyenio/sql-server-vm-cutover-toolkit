@@ -201,6 +201,7 @@ foreach ($module in @('dbatools')) {
 }
 
 Import-Module dbatools -ErrorAction Stop
+Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true
 
 if (-not $SkipClusterChecks) {
     if (-not (Get-Module -ListAvailable -Name FailoverClusters)) {
@@ -543,17 +544,17 @@ catch {
 try {
     $tnc = Test-NetConnection -ComputerName $ListenerName -Port $ListenerPort -WarningAction SilentlyContinue
     if ($tnc.TcpTestSucceeded) {
-        Add-Result -Category "Listener" -Check "TCP connectivity" -Status "PASS" -Target "$ListenerName:$ListenerPort" `
+        Add-Result -Category "Listener" -Check "TCP connectivity" -Status "PASS" -Target "${ListenerName}:${ListenerPort}" `
             -Details ("TcpTestSucceeded={0}; RemoteAddress={1}" -f $tnc.TcpTestSucceeded, $tnc.RemoteAddress)
     }
     else {
-        Add-Result -Category "Listener" -Check "TCP connectivity" -Status "FAIL" -Target "$ListenerName:$ListenerPort" `
+        Add-Result -Category "Listener" -Check "TCP connectivity" -Status "FAIL" -Target "${ListenerName}:${ListenerPort}" `
             -Details ("TcpTestSucceeded={0}; RemoteAddress={1}" -f $tnc.TcpTestSucceeded, $tnc.RemoteAddress) `
             -Remediation "Validate load balancer rule, backend pool, SQL listener, and firewall."
     }
 }
 catch {
-    Add-Result -Category "Listener" -Check "TCP connectivity" -Status "FAIL" -Target "$ListenerName:$ListenerPort" `
+    Add-Result -Category "Listener" -Check "TCP connectivity" -Status "FAIL" -Target "${ListenerName}:${ListenerPort}" `
         -Details $_.Exception.Message `
         -Remediation "Validate name resolution, route, firewall, and LB."
 }
@@ -582,7 +583,7 @@ if (-not $SkipClusterChecks) {
             -Details ("ClusterName={0}" -f $cluster.Name)
     }
     catch {
-        Add-Result -Category "Cluster" -Check "Cluster reachable" -Status "FAIL" -Target ($ClusterName ? $ClusterName : 'LocalCluster') `
+        Add-Result -Category "Cluster" -Check "Cluster reachable" -Status "FAIL" -Target $(if ($ClusterName) { $ClusterName } else { 'LocalCluster' }) `
             -Details $_.Exception.Message `
             -Remediation "Run from a host with cluster access and validate cluster service / permissions."
         $cluster = $null

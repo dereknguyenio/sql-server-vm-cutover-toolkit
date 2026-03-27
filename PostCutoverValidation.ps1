@@ -245,6 +245,7 @@ if (-not (Get-Module -ListAvailable -Name dbatools)) {
     throw "dbatools module is required. Install with: Install-Module dbatools -Scope CurrentUser"
 }
 Import-Module dbatools -ErrorAction Stop
+Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true
 
 if (-not $SkipClusterChecks) {
     if (-not (Get-Module -ListAvailable -Name FailoverClusters)) {
@@ -272,17 +273,17 @@ catch {
 try {
     $tnc = Test-NetConnection -ComputerName $ListenerName -Port $ListenerPort -WarningAction SilentlyContinue
     if ($tnc.TcpTestSucceeded) {
-        Add-Result -Category "Listener" -Check "TCP connectivity" -Status "PASS" -Target "$ListenerName:$ListenerPort" `
+        Add-Result -Category "Listener" -Check "TCP connectivity" -Status "PASS" -Target "${ListenerName}:${ListenerPort}" `
             -Details "RemoteAddress=$($tnc.RemoteAddress)"
     }
     else {
-        Add-Result -Category "Listener" -Check "TCP connectivity" -Status "FAIL" -Target "$ListenerName:$ListenerPort" `
+        Add-Result -Category "Listener" -Check "TCP connectivity" -Status "FAIL" -Target "${ListenerName}:${ListenerPort}" `
             -Details "TCP connectivity failed." `
             -Remediation "Validate load balancer, listener resource, and SQL service."
     }
 }
 catch {
-    Add-Result -Category "Listener" -Check "TCP connectivity" -Status "FAIL" -Target "$ListenerName:$ListenerPort" `
+    Add-Result -Category "Listener" -Check "TCP connectivity" -Status "FAIL" -Target "${ListenerName}:${ListenerPort}" `
         -Details $_.Exception.Message
 }
 
@@ -626,7 +627,7 @@ if (-not $SkipClusterChecks) {
             -Details "Cluster is reachable."
     }
     catch {
-        Add-Result -Category "Cluster" -Check "Cluster reachable" -Status "FAIL" -Target ($ClusterName ? $ClusterName : 'LocalCluster') `
+        Add-Result -Category "Cluster" -Check "Cluster reachable" -Status "FAIL" -Target $(if ($ClusterName) { $ClusterName } else { 'LocalCluster' }) `
             -Details $_.Exception.Message
         $cluster = $null
     }
