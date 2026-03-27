@@ -2,11 +2,17 @@
 
 Two scripts to validate your new SQL Server Always On AG — one before cutover, one after.
 
+## Where to Run
+
+1. **RDP into your primary SQL VM** (e.g. `newsql01`)
+2. Open **Windows PowerShell** (search PowerShell in Start menu — run as Administrator)
+3. Follow the steps below
+
 ---
 
 ## Prerequisites
 
-Run once on the machine where you'll execute the scripts:
+Run once, in PowerShell on the SQL VM:
 
 ```powershell
 Install-Module dbatools -Scope CurrentUser -Force
