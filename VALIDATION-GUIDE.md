@@ -25,11 +25,13 @@ Two scripts to validate your new SQL Server Always On AG — one before cutover,
 
 ## Prerequisites
 
-Run once, in PowerShell on the SQL VM:
+Run this once on the **primary SQL VM only** (not the secondary):
 
 ```powershell
 Install-Module dbatools -Scope CurrentUser -Force
 ```
+
+> dbatools connects to the secondary remotely over TCP — no installation needed on the secondary.
 
 Clone the toolkit:
 
