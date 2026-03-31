@@ -42,6 +42,7 @@ Minimum required values to set:
 | `$SourceInstance` | `oldsql01` | Current production SQL Server |
 | `$PrimaryInstance` | `newsql01` | New primary AG replica |
 | `$SecondaryInstance` | `newsql02` | New secondary AG replica |
+| `$DRInstance` | `newsql03` | DR AG replica (optional) |
 | `$AgName` | `ProdAG` | Availability Group name |
 | `$ListenerName` | `sql-prod-listener` | AG listener DNS name |
 | `$Databases` | `@("HFM","APPDB")` | Databases to cut over |
@@ -72,6 +73,7 @@ $TargetCred = Get-Credential -Message "Target SQL sysadmin credential"
 .\PreCutoverReadiness.ps1 `
     -PrimaryInstance   $PrimaryInstance `
     -SecondaryInstance $SecondaryInstance `
+    -DRInstance        $DRInstance `
     -AgName            $AgName `
     -ListenerName      $ListenerName `
     -Databases         $Databases `
@@ -193,6 +195,7 @@ Invoke-Item "$OutputRoot\DatabaseRefresh\*.html"
 .\PostCutoverValidation.ps1 `
     -PrimaryInstance       $PrimaryInstance `
     -SecondaryInstance     $SecondaryInstance `
+    -DRInstance            $DRInstance `
     -ListenerName          $ListenerName `
     -ExpectedPrimary       $PrimaryInstance `
     -AgName                $AgName `

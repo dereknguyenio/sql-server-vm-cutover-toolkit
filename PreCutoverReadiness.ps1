@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Runs pre-cutover health checks against:
-      - SQL instances (primary + secondary)
+      - SQL instances (primary + secondary + optional DR)
       - Availability Group + databases
       - WSFC cluster
       - Listener / DNS / TCP connectivity
@@ -28,6 +28,7 @@
     .\PreCutoverReadiness.ps1 `
       -PrimaryInstance "sqlvm01" `
       -SecondaryInstance "sqlvm02" `
+      -DRInstance "sqlvm03" `
       -AgName "ProdAG" `
       -ListenerName "sql-prod-listener" `
       -Databases "HFM","APPDB" `
@@ -41,6 +42,7 @@
     .\PreCutoverReadiness.ps1 `
       -PrimaryInstance "sqlvm01" `
       -SecondaryInstance "sqlvm02" `
+      -DRInstance "sqlvm03" `
       -AgName "ProdAG" `
       -ListenerName "sql-prod-listener" `
       -Databases "HFM","APPDB" `
@@ -55,6 +57,9 @@ param(
 
     [Parameter(Mandatory)]
     [string]$SecondaryInstance,
+
+    [Parameter()]
+    [string]$DRInstance,
 
     [Parameter(Mandatory)]
     [string]$AgName,
@@ -98,6 +103,10 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Build instance list (DR is optional)
+$AllInstances = @($PrimaryInstance, $SecondaryInstance)
+if ($DRInstance) { $AllInstances += $DRInstance }
 
 # -----------------------------
 # Helpers
@@ -233,7 +242,7 @@ $jsonPath  = Join-Path $OutputFolder "PreCutoverReadiness_$timestamp.json"
 # -----------------------------
 Write-Section "SQL connectivity"
 
-foreach ($instance in @($PrimaryInstance, $SecondaryInstance)) {
+foreach ($instance in $AllInstances) {
     try {
         $conn = Test-SqlConnectionSafe -SqlInstance $instance
         if ($null -eq $conn) {
@@ -284,7 +293,7 @@ WHERE type_desc = 'DATABASE_MIRRORING';
 
 $instanceInfo = @{}
 
-foreach ($instance in @($PrimaryInstance, $SecondaryInstance)) {
+foreach ($instance in $AllInstances) {
     try {
         $info = Invoke-SqlSafe -SqlInstance $instance -Query $versionQuery | Select-Object -First 1
         $instanceInfo[$instance] = $info
@@ -329,29 +338,46 @@ foreach ($instance in @($PrimaryInstance, $SecondaryInstance)) {
     }
 }
 
-# Compare versions + collation
-if ($instanceInfo.ContainsKey($PrimaryInstance) -and $instanceInfo.ContainsKey($SecondaryInstance)) {
+# Compare versions + collation across all instances
+$infoInstances = $AllInstances | Where-Object { $instanceInfo.ContainsKey($_) }
+if (($infoInstances | Measure-Object).Count -ge 2) {
     $p = $instanceInfo[$PrimaryInstance]
-    $s = $instanceInfo[$SecondaryInstance]
+    $allTarget = ($infoInstances -join ',')
 
-    if ($p.ProductVersion -eq $s.ProductVersion -and $p.ProductLevel -eq $s.ProductLevel) {
-        Add-Result -Category "SQL" -Check "Version parity" -Status "PASS" -Target "$PrimaryInstance,$SecondaryInstance" `
-            -Details ("Both replicas match: Version={0}; Level={1}" -f $p.ProductVersion, $p.ProductLevel)
+    $versionMatch = $true
+    $collationMatch = $true
+    $versionDetails = @()
+    $collationDetails = @()
+
+    foreach ($inst in $infoInstances) {
+        $info = $instanceInfo[$inst]
+        $versionDetails += "{0}={1}/{2}" -f $inst, $info.ProductVersion, $info.ProductLevel
+        $collationDetails += "{0}={1}" -f $inst, $info.Collation
+        if ($info.ProductVersion -ne $p.ProductVersion -or $info.ProductLevel -ne $p.ProductLevel) {
+            $versionMatch = $false
+        }
+        if ($info.Collation -ne $p.Collation) {
+            $collationMatch = $false
+        }
+    }
+
+    if ($versionMatch) {
+        Add-Result -Category "SQL" -Check "Version parity" -Status "PASS" -Target $allTarget `
+            -Details ("All replicas match: Version={0}; Level={1}" -f $p.ProductVersion, $p.ProductLevel)
     }
     else {
-        Add-Result -Category "SQL" -Check "Version parity" -Status "FAIL" -Target "$PrimaryInstance,$SecondaryInstance" `
-            -Details ("Mismatch. Primary={0}/{1}; Secondary={2}/{3}" -f `
-                $p.ProductVersion, $p.ProductLevel, $s.ProductVersion, $s.ProductLevel) `
-            -Remediation "Patch both replicas to the same SQL build before cutover."
+        Add-Result -Category "SQL" -Check "Version parity" -Status "FAIL" -Target $allTarget `
+            -Details ("Mismatch. {0}" -f ($versionDetails -join '; ')) `
+            -Remediation "Patch all replicas to the same SQL build before cutover."
     }
 
-    if ($p.Collation -eq $s.Collation) {
-        Add-Result -Category "SQL" -Check "Collation parity" -Status "PASS" -Target "$PrimaryInstance,$SecondaryInstance" `
-            -Details "Both replicas use collation '$($p.Collation)'."
+    if ($collationMatch) {
+        Add-Result -Category "SQL" -Check "Collation parity" -Status "PASS" -Target $allTarget `
+            -Details "All replicas use collation '$($p.Collation)'."
     }
     else {
-        Add-Result -Category "SQL" -Check "Collation parity" -Status "FAIL" -Target "$PrimaryInstance,$SecondaryInstance" `
-            -Details ("Mismatch. Primary={0}; Secondary={1}" -f $p.Collation, $s.Collation) `
+        Add-Result -Category "SQL" -Check "Collation parity" -Status "FAIL" -Target $allTarget `
+            -Details ("Mismatch. {0}" -f ($collationDetails -join '; ')) `
             -Remediation "Investigate collation mismatch before cutover."
     }
 }
@@ -712,7 +738,7 @@ FROM sys.servers
 WHERE is_linked = 1;
 "@
 
-    foreach ($instance in @($PrimaryInstance, $SecondaryInstance)) {
+    foreach ($instance in $AllInstances) {
         try {
             $loginCount = Invoke-SqlSafe -SqlInstance $instance -Query $loginQuery | Select-Object -First 1
             Add-Result -Category "Objects" -Check "Login inventory" -Status "INFO" -Target $instance `
@@ -773,32 +799,42 @@ WHERE is_linked = 1;
         }
     }
 
-    # Compare login/job/operator/linked server counts between replicas
-    try {
-        $pLogin = (Invoke-SqlSafe -SqlInstance $PrimaryInstance -Query $loginQuery | Select-Object -First 1).LoginCount
-        $sLogin = (Invoke-SqlSafe -SqlInstance $SecondaryInstance -Query $loginQuery | Select-Object -First 1).LoginCount
+    # Compare login/job counts across all replicas
+    $allTarget = $AllInstances -join ','
 
-        $status = if ($pLogin -eq $sLogin) { 'PASS' } else { 'WARN' }
-        Add-Result -Category "Objects" -Check "Login count parity" -Status $status -Target "$PrimaryInstance,$SecondaryInstance" `
-            -Details ("Primary={0}; Secondary={1}" -f $pLogin, $sLogin) `
+    try {
+        $loginCounts = @{}
+        foreach ($inst in $AllInstances) {
+            $loginCounts[$inst] = (Invoke-SqlSafe -SqlInstance $inst -Query $loginQuery | Select-Object -First 1).LoginCount
+        }
+
+        $allMatch = ($loginCounts.Values | Select-Object -Unique | Measure-Object).Count -eq 1
+        $status = if ($allMatch) { 'PASS' } else { 'WARN' }
+        $details = ($AllInstances | ForEach-Object { "{0}={1}" -f $_, $loginCounts[$_] }) -join '; '
+        Add-Result -Category "Objects" -Check "Login count parity" -Status $status -Target $allTarget `
+            -Details $details `
             -Remediation "If counts differ, validate expected login migration / exclusions."
     }
     catch {
-        Add-Result -Category "Objects" -Check "Login count parity" -Status "FAIL" -Target "$PrimaryInstance,$SecondaryInstance" `
+        Add-Result -Category "Objects" -Check "Login count parity" -Status "FAIL" -Target $allTarget `
             -Details $_.Exception.Message
     }
 
     try {
-        $pJobs = Invoke-SqlSafe -SqlInstance $PrimaryInstance -Database msdb -Query $jobQuery | Select-Object -First 1
-        $sJobs = Invoke-SqlSafe -SqlInstance $SecondaryInstance -Database msdb -Query $jobQuery | Select-Object -First 1
+        $jobCounts = @{}
+        foreach ($inst in $AllInstances) {
+            $jobCounts[$inst] = (Invoke-SqlSafe -SqlInstance $inst -Database msdb -Query $jobQuery | Select-Object -First 1).TotalJobs
+        }
 
-        $status = if ($pJobs.TotalJobs -eq $sJobs.TotalJobs) { 'PASS' } else { 'WARN' }
-        Add-Result -Category "Objects" -Check "Job count parity" -Status $status -Target "$PrimaryInstance,$SecondaryInstance" `
-            -Details ("PrimaryJobs={0}; SecondaryJobs={1}" -f $pJobs.TotalJobs, $sJobs.TotalJobs) `
+        $allMatch = ($jobCounts.Values | Select-Object -Unique | Measure-Object).Count -eq 1
+        $status = if ($allMatch) { 'PASS' } else { 'WARN' }
+        $details = ($AllInstances | ForEach-Object { "{0}={1}" -f $_, $jobCounts[$_] }) -join '; '
+        Add-Result -Category "Objects" -Check "Job count parity" -Status $status -Target $allTarget `
+            -Details $details `
             -Remediation "Validate SQL Agent job migration and intentional exclusions."
     }
     catch {
-        Add-Result -Category "Objects" -Check "Job count parity" -Status "FAIL" -Target "$PrimaryInstance,$SecondaryInstance" `
+        Add-Result -Category "Objects" -Check "Job count parity" -Status "FAIL" -Target $allTarget `
             -Details $_.Exception.Message
     }
 }
@@ -871,6 +907,7 @@ $style
   <p><strong>Generated:</strong> $(Get-Date)</p>
   <p><strong>Primary:</strong> $PrimaryInstance<br/>
      <strong>Secondary:</strong> $SecondaryInstance<br/>
+     $(if ($DRInstance) { "<strong>DR:</strong> $DRInstance<br/>" })
      <strong>AG:</strong> $AgName<br/>
      <strong>Listener:</strong> $ListenerName</p>
   <h2>Summary</h2>

@@ -57,6 +57,7 @@ Key values to set:
 ```powershell
 $PrimaryInstance    = "newsql01"           # new primary SQL instance
 $SecondaryInstance  = "newsql02"           # new secondary SQL instance
+$DRInstance         = "newsql03"           # DR replica (optional)
 $AgName             = "ProdAG"             # Availability Group name
 $ListenerName       = "sql-prod-listener"  # AG listener DNS name
 $ClusterName        = "SQLCLUSTER01"       # Windows Failover Cluster name
@@ -81,6 +82,7 @@ Run this **before the cutover window** to confirm the new cluster is ready.
 .\PreCutoverReadiness.ps1 `
     -PrimaryInstance    $PrimaryInstance `
     -SecondaryInstance  $SecondaryInstance `
+    -DRInstance         $DRInstance `
     -AgName             $AgName `
     -ListenerName       $ListenerName `
     -Databases          $Databases `
@@ -109,6 +111,7 @@ Run this **immediately after cutover** to confirm everything is healthy on the n
 .\PostCutoverValidation.ps1 `
     -PrimaryInstance    $PrimaryInstance `
     -SecondaryInstance  $SecondaryInstance `
+    -DRInstance         $DRInstance `
     -ListenerName       $ListenerName `
     -ExpectedPrimary    $PrimaryInstance `
     -AgName             $AgName `

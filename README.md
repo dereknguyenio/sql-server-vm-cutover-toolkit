@@ -54,6 +54,7 @@ cp .\examples\cutover-config.example.ps1 .\cutover-config.ps1
 .\PreCutoverReadiness.ps1 `
   -PrimaryInstance $PrimaryInstance `
   -SecondaryInstance $SecondaryInstance `
+  -DRInstance $DRInstance `
   -AgName $AgName `
   -ListenerName $ListenerName `
   -Databases $Databases `
@@ -98,6 +99,7 @@ $tgtCred = Get-Credential -Message "Target SQL credential"
 .\PostCutoverValidation.ps1 `
   -PrimaryInstance $PrimaryInstance `
   -SecondaryInstance $SecondaryInstance `
+  -DRInstance $DRInstance `
   -ListenerName $ListenerName `
   -ExpectedPrimary $PrimaryInstance `
   -AgName $AgName `

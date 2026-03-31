@@ -19,6 +19,7 @@
     .\PostCutoverValidation.ps1 `
       -PrimaryInstance "newsql01" `
       -SecondaryInstance "newsql02" `
+      -DRInstance "newsql03" `
       -ListenerName "sql-prod-listener" `
       -ExpectedPrimary "newsql01" `
       -AgName "ProdAG" `
@@ -28,6 +29,7 @@
     .\PostCutoverValidation.ps1 `
       -PrimaryInstance "newsql01" `
       -SecondaryInstance "newsql02" `
+      -DRInstance "newsql03" `
       -ListenerName "sql-prod-listener" `
       -ExpectedPrimary "newsql01" `
       -AgName "ProdAG" `
@@ -42,6 +44,9 @@ param(
 
     [Parameter(Mandatory)]
     [string]$SecondaryInstance,
+
+    [Parameter()]
+    [string]$DRInstance,
 
     [Parameter(Mandatory)]
     [string]$ListenerName,
@@ -94,6 +99,10 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Build instance list (DR is optional)
+$AllInstances = @($PrimaryInstance, $SecondaryInstance)
+if ($DRInstance) { $AllInstances += $DRInstance }
 
 $script:Results = New-Object System.Collections.Generic.List[object]
 
@@ -207,6 +216,7 @@ $style
 <p><strong>Generated:</strong> $(Get-Date)<br/>
 <strong>Listener:</strong> $ListenerName<br/>
 <strong>Expected Primary:</strong> $ExpectedPrimary<br/>
+$(if ($DRInstance) { "<strong>DR:</strong> $DRInstance<br/>" })
 <strong>AG:</strong> $AgName</p>
 <h2>Summary</h2>
 <ul>
@@ -309,7 +319,7 @@ catch {
 }
 
 # Basic instance connectivity
-foreach ($instance in @($PrimaryInstance, $SecondaryInstance)) {
+foreach ($instance in $AllInstances) {
     try {
         $conn = Test-DbaConnection -SqlInstance $instance -SqlCredential $SqlCredential -EnableException
         Add-Result -Category "Connectivity" -Check "SQL instance connectivity" -Status "PASS" -Target $instance `
